@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stasera al cine a Milano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F5F7; --surface: #FFFFFF; --ink: #141821; --muted: #5B6372; --line: #DADFE6;
+  --tram: #F2A000; --tram-ink: #1A1300; --warn: #7A4300; --warn-bg: #FFF1CC;
+  color-scheme: light dark;
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0F1420; --surface: #182031; --ink: #E9ECF2; --muted: #9AA3B2; --line: #2B3346;
+          --warn: #FFD58A; --warn-bg: #3A2A08; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); }
+.display { font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif; font-weight: 600; }
+
+header { position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line); }
+.bar { max-width: 720px; margin: 0 auto; padding: 12px 16px 10px; }
+h1 { font-size: 24px; line-height: 1; margin: 0 0 10px; }
+#q { width: 100%; min-height: 46px; padding: 10px 14px; font: inherit; font-size: 17px;
+     color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.row { display: flex; gap: 8px; margin: 8px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.row::-webkit-scrollbar { display: none; }
+.chip { flex: none; min-height: 40px; padding: 0 14px; font: inherit; font-size: 15px; cursor: pointer;
+        color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.chip[aria-pressed="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+.chip.partial { border-style: dashed; }
+.chip.vo[aria-pressed="true"] { color: var(--tram-ink); background: var(--tram); border-color: var(--tram); }
+#status { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+#status.warn { padding: 6px 10px; color: var(--warn); background: var(--warn-bg); border-radius: 8px; }
+
+main { max-width: 720px; margin: 0 auto; padding: 0 16px 64px; }
+.note { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+article { padding: 18px 0 14px; border-bottom: 1px solid var(--line); }
+h2 { margin: 0 0 6px; font-size: 30px; line-height: 1.02; overflow-wrap: anywhere; }
+h3 { margin: 12px 0 2px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.cin { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.cin .name { flex: 1 0 100%; color: var(--ink); font-size: 15px; text-decoration: none; }
+.cin .name:hover { text-decoration: underline; }
+.t { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 70px; min-height: 46px;
+     padding: 0 12px; font-size: 24px; font-variant-numeric: tabular-nums; color: var(--ink); text-decoration: none;
+     background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.t.vo { border-color: var(--tram); }
+.t.vo::after { content: "V.O."; padding: 3px 5px; font: 700 11px/1 system-ui, sans-serif;
+               color: var(--tram-ink); background: var(--tram); border-radius: 4px; }
+.empty { padding: 40px 0; text-align: center; color: var(--muted); }
+.empty button { margin-top: 12px; }
+:focus-visible { outline: 3px solid var(--tram); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 class="display">Stasera al cine</h1>
+    <label class="sr" for="q">Cerca un film</label>
+    <input id="q" type="search" placeholder="Cerca un film" autocomplete="off" enterkeyhint="search">
+    <div class="row" id="days" role="group" aria-label="Giorno"></div>
+    <div class="row" id="slots" role="group" aria-label="Orario e lingua"></div>
+    <p id="status" aria-live="polite">Carico gli orari…</p>
+  </div>
+</header>
+<main id="list"></main>
+
+<script>
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, "0");
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// same normalisation as film_key() in scrape.py, so "gialappàs" finds "Gialappa's"
+const norm = s => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/(\w)['’](\w)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = u => /^https:\/\//.test(u) ? esc(u) : "#";
+
+const SLOTS = [["all", "Tutto il giorno", 0, 24], ["pre", "Prima delle 18", 0, 18], ["sera", "18–21", 18, 21], ["tardi", "Dopo le 21", 21, 24]];
+const state = { q: "", day: "all", dayTouched: false, slot: "all", vo: false };
+let D, days = [], partial = new Set();
+
+function dayLabel(k) {
+  const today = new Date(), tomorrow = new Date(Date.now() + 864e5);
+  if (k === isoDay(today)) return "Oggi";
+  if (k === isoDay(tomorrow)) return "Domani";
+  const s = new Date(k + "T12:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric" });
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+function chip(label, pressed, attrs, cls = "") {
+  return `<button type="button" class="chip ${cls}" aria-pressed="${pressed}" ${attrs}>${label}</button>`;
+}
+
+function renderControls() {
+  const day = effectiveDay();
+  $("#days").innerHTML = chip("Tutti i giorni", day === "all", 'data-day="all"') +
+    days.map(k => chip(dayLabel(k) + (partial.has(k) ? " (parziale)" : ""), day === k, `data-day="${k}"`, partial.has(k) ? "partial" : "")).join("");
+  $("#slots").innerHTML = SLOTS.map(([id, label]) => chip(label, state.slot === id, `data-slot="${id}"`)).join("") +
+    chip("Solo V.O.", state.vo, 'data-vo="1"', "vo");
+}
+
+// typing a title means "where and when, any day": unless a day was picked by hand
+const effectiveDay = () => state.q && !state.dayTouched ? "all" : state.day;
+
+function render() {
+  renderControls();
+  const now = new Date(), nowS = `${isoDay(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const q = norm(state.q), day = effectiveDay();
+  const [, , from, to] = SLOTS.find(s => s[0] === state.slot);
+  const films = new Map();  // key -> {film, days: Map(day -> Map(cinema -> [show]))}; shows arrive sorted
+  for (const s of D.shows) {
+    const h = +s.start.slice(11, 13), d = s.start.slice(0, 10);
+    if (s.start < nowS || (day !== "all" && d !== day) || (state.vo && !s.vo) || h < from || h >= to) continue;
+    if (q && !s.key.includes(q) && !norm(s.film).includes(q)) continue;
+    const f = films.get(s.key) || films.set(s.key, { film: s.film, days: new Map() }).get(s.key);
+    const cins = f.days.get(d) || f.days.set(d, new Map()).get(d);
+    (cins.get(s.cinema) || cins.set(s.cinema, []).get(s.cinema)).push(s);
+  }
+
+  let html = day !== "all" && partial.has(day)
+    ? `<p class="note">Per questo giorno molte sale non hanno ancora pubblicato gli orari.</p>` : "";
+  for (const f of films.values()) {
+    html += `<article><h2 class="display">${esc(f.film)}</h2>`;
+    for (const [d, cins] of f.days) {
+      if (day === "all") html += `<h3>${dayLabel(d)}${partial.has(d) ? " (parziale)" : ""}</h3>`;
+      for (const [cid, list] of cins) {
+        const c = D.cinemas[cid];
+        const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${c.name}, ${c.address}, Milano`);
+        html += `<div class="cin"><a class="name" href="${maps}" target="_blank" rel="noopener">${esc(c.name)}</a>` +
+          list.map(s => `<a class="t display${s.vo ? " vo" : ""}" href="${safeUrl(s.url)}" target="_blank" rel="noopener"` +
+            ` aria-label="${s.start.slice(11)}${s.vo ? ", versione originale" : ""}, ${esc(c.name)}">${s.start.slice(11)}</a>`).join("") +
+          `</div>`;
+      }
+    }
+    html += `</article>`;
+  }
+  $("#list").innerHTML = html || `<div class="empty"><p>Nessuno spettacolo con questi filtri.</p>` +
+    `<button type="button" class="chip" id="reset">Mostra tutti i giorni e gli orari</button></div>`;
+}
+
+function renderStatus() {
+  const up = new Date(D.updated), hours = (Date.now() - up) / 36e5;
+  const when = up.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const msgs = [isoDay(up) === isoDay(new Date()) ? `Aggiornato alle ${when}` : `Aggiornato il ${up.toLocaleDateString("it-IT")} alle ${when}`];
+  if (hours > 6) msgs.push(`gli orari hanno più di ${Math.floor(hours)} ore, potrebbero essere cambiati`);
+  if (D.failed.length) msgs.push(`non aggiornati: ${D.failed.join(", ")}`);
+  $("#status").textContent = msgs.join("; ") + ".";
+  $("#status").classList.toggle("warn", hours > 6 || D.failed.length > 0);
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.id === "reset") Object.assign(state, { day: "all", dayTouched: true, slot: "all", vo: false });
+  else if (b.dataset.day) Object.assign(state, { day: b.dataset.day, dayTouched: true });
+  else if (b.dataset.slot) state.slot = b.dataset.slot;
+  else if (b.dataset.vo) state.vo = !state.vo;
+  else return;
+  render();
+});
+$("#q").addEventListener("input", e => { state.q = e.target.value; render(); });
+
+fetch("data.json", { cache: "no-cache" }).then(r => r.json()).then(d => {
+  D = d;
+  const today = isoDay(new Date());
+  const perDay = {};
+  for (const s of D.shows) perDay[s.start.slice(0, 10)] = (perDay[s.start.slice(0, 10)] || 0) + 1;
+  days = Object.keys(perDay).filter(k => k >= today).sort();
+  // a day with far fewer shows than the busiest one is presales only: most cinemas haven't published yet.
+  // Today is never "partial": late in the evening few shows are simply left.
+  const busiest = Math.max(...Object.values(perDay));
+  partial = new Set(days.filter(k => k > today && perDay[k] < busiest * 0.4));
+  state.day = days.includes(today) ? today : "all";
+  renderStatus();
+  render();
+}).catch(() => {
+  $("#status").textContent = "Non riesco a caricare gli orari: controlla la connessione e ricarica la pagina.";
+  $("#status").classList.add("warn");
+});
+</script>
+</body>
+</html>

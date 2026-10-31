@@ -1,0 +1,39 @@
+name: Aggiorna orari
+
+on:
+  schedule:
+    - cron: "0 4-22/3 * * *"  # UTC: every 3 hours, roughly 5:00-23:00 in Milan
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python test_scrape.py
+      # exits 1 when a cinema failed (GitHub emails), but still writes data.json for the others
+      - run: python scrape.py
+      - uses: actions/upload-pages-artifact@v4
+        if: ${{ !cancelled() && hashFiles('site/data.json') != '' }}
+        with:
+          path: site
+      - id: deploy
+        if: ${{ !cancelled() && hashFiles('site/data.json') != '' }}
+        uses: actions/deploy-pages@v4
