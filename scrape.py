@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch showtimes for Milan cinemas and write site/data.json.
 
-Three readers cover 15 venues: UCI (open JSON), 18tickets (Anteo, Cineteca,
+Three sources cover 15 venues: UCI (open JSON), 18tickets (Anteo, Cineteca,
 Cinemino) and the "cvu" PHP sites (Notorious, Colosseo, Eliseo).
 Pages are machine-generated templates (18tickets even leaves tags unclosed),
 so they are read with regexes; test_scrape.py pins them to saved fixtures.
@@ -14,7 +14,7 @@ import time
 import unicodedata
 import urllib.request
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,7 +31,7 @@ CINEMAS = {
     "arlecchino": ("Cineteca Arlecchino", "Via San Pietro all'Orto 9", "t18", "arlecchino.cinetecadimilano"),
     "mic": ("Cineteca MIC", "Viale Fulvio Testi 121", "t18", "mic.cinetecadimilano"),
     "metropolis": ("Cineteca Metropolis", "Via Oslavia 8, Paderno Dugnano", "t18", "metropolis.cinetecadimilano"),
-    "cinemino": ("Il Cinemino", "Via Seneca 6", "t18", "ilcinemino.ilcinemino"),
+    "cinemino": ("Il Cinemino", "Via Seneca 6", "t18films", "ilcinemino.ilcinemino"),
     "colosseo": ("Colosseo", "Viale Monte Nero 84", "cvu", "https://www.ilregnodelcinema.com/colosseo/"),
     "eliseo": ("Eliseo", "Via Torino 64", "cvu", "https://www.ilregnodelcinema.com/eliseo/"),
     "gloria": ("Notorious Gloria", "Corso Vercelli 18", "cvu", "https://www.notoriouscinemas.it/gloria/"),
@@ -58,6 +58,7 @@ NOISE_RE = re.compile(
     r"|(?:\s-)?\s*\bv\.\s?m\.?\s?\d{2}\b|(?:\s-)?\s*\briedizione\b|\bc\.a\.\s*$",
     re.I,
 )
+SUBTITLE_RE = re.compile(r"\s[-–]\s|:")  # "Minotaur - nel labirinto", "Avatar: fuoco e cenere"
 
 
 def clean_title(raw):
@@ -65,9 +66,9 @@ def clean_title(raw):
     return " ".join(NOISE_RE.sub(" ", t).split()).strip(" -")
 
 
-def is_vo(*texts):
-    text = " ".join(texts)
-    return bool(VO_RE.search(text) or re.search(r"\bsott", text, re.I))
+def is_vo(title, language=""):
+    """language = the cinema's language/label fields; "sottotitoli" only counts there ("Sotto le foglie")."""
+    return bool(VO_RE.search(f"{title} {language}") or re.search(r"\bsott", language, re.I))
 
 
 def film_key(title):
@@ -78,18 +79,25 @@ def film_key(title):
     return ALIASES.get(t, t)
 
 
-def merge_keys(sales):
-    """{key: set(cinema)} -> {key: canonical key}.
-    'minotaur nel labirinto del potere' joins 'minotaur' when no cinema lists both:
-    chains disagree on subtitles, while one cinema showing both means two different films.
-    ponytail: prefix heuristic, can still merge a sequel shown only where the original isn't."""
-    canon, merged = {}, {}
+def head_key(title):
+    """Key of the title before its subtitle: "Minotaur - nel labirinto del potere" -> "minotaur"."""
+    return film_key(SUBTITLE_RE.split(clean_title(title), maxsplit=1)[0])
+
+
+def merge_keys(sales, heads):
+    """sales {key: set(cinema)}, heads {key: set(head_key)} -> {key: canonical key}.
+    "minotaur nel labirinto del potere" joins "minotaur" when its title is literally "Minotaur - ..."
+    and no cinema lists both: chains disagree on subtitles, one cinema showing both means two films.
+    Sequels without a separator ("Scream 7") never merge.
+    ponytail: a re-release titled "X: something" can still join X where X isn't shown."""
+    canon, roots = {}, {}
     for k in sorted(sales, key=len):
-        a = next((a for a in merged if len(a) >= 5 and k.startswith(a + " ") and not merged[a] & sales[k]), None)
+        a = next((h for h in sorted(heads.get(k, ()), key=len)
+                  if h != k and len(h) >= 5 and h in roots and not roots[h] & sales[k]), None)
         if a:
-            merged[a] |= sales[k]
+            roots[a] |= sales[k]
         else:
-            merged[k] = set(sales[k])
+            roots[k] = set(sales[k])
         canon[k] = a or k
     return canon
 
@@ -100,10 +108,18 @@ def display_title(counts):
     return best if best != best.upper() else best.capitalize()
 
 
+def cinema_day(start):
+    """A 00:20 show belongs to the previous evening's programme."""
+    return (start - timedelta(hours=5)).date()
+
+
 # --- readers: each returns [(title, start, vo, url)], start naive Europe/Rome ---
 
-def get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+def get(url, ajax=False, pause=0.5):
+    headers = {"User-Agent": UA}
+    if ajax:  # 18tickets answers its own page's jQuery calls only
+        headers |= {"X-Requested-With": "XMLHttpRequest", "Accept": "text/javascript, */*; q=0.01"}
+    req = urllib.request.Request(url, headers=headers)
     for attempt in (1, 2):  # one retry: a transient error would hide the cinema until the next run
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
@@ -113,8 +129,8 @@ def get(url):
             if attempt == 2:
                 raise
             print(f"retry {url}: {e!r}", file=sys.stderr)
-            time.sleep(5)
-    time.sleep(0.5)  # be gentle
+            time.sleep(30 if getattr(e, "code", None) == 429 else 5)  # 18tickets rate-limits without Retry-After
+    time.sleep(pause)  # be gentle
     return body
 
 
@@ -124,7 +140,8 @@ def parse_uci(data, base="https://www.ucicinemas.it"):
         for group in film["screens"]:
             for entries in group.values():
                 for e in entries:
-                    vo = (e.get("language") or {}).get("slug", "ITA") != "ITA"
+                    # DSA = autism-friendly screening, still in Italian
+                    vo = (e.get("language") or {}).get("slug", "ITA") not in ("ITA", "DSA")
                     for p in e["performances"]:
                         start = datetime.strptime(p["starts_at"], "%Y-%m-%d %H:%M:%S")
                         shows.append((film["title"], start, vo, base + p["cart_link"]))
@@ -148,23 +165,24 @@ def parse_t18_home(page):
         if not (title and times):
             continue
         lingua = re.search(r"Lingua:\s*</strong>\s*([^<]*)", block)
-        label = re.search(r"film-label[^>]*>\s*([^<]*)", block)
-        vo = is_vo(title.group(1), lingua.group(1) if lingua else "", label.group(1) if label else "")
+        labels = re.findall(r"film-label[^>]*>\s*([^<]*)", block)  # e.g. ["LEE CHANG-DONG", "V.O. SOTT. ITA"]
+        vo = is_vo(title.group(1), " ".join([lingua.group(1) if lingua else "", *labels]))
         for ms, url in times:
             start = datetime.fromtimestamp(int(ms) / 1000, TZ).replace(tzinfo=None)
             shows.append((clean_title(title.group(1)), start, vo, html.unescape(url)))
     return shows
 
 
-def film_ids_t18(page):
-    return sorted(set(re.findall(r"/film/(\d+)'", page)))
+def fetch_t18(host):
+    return parse_t18_home(get(f"https://{host}.18tickets.it/"))
 
 
-def parse_t18_film(page, url):
-    """Film page (Cinemino): <a class='film-projection' data-date-extended='... 02/11/2026 ore 21:30' data-title=...>."""
+def parse_t18_film(page, occupations, url):
+    """Cinemino: the film page has the language, the occupations endpoint (JS wrapping HTML) every date."""
     lingua = re.search(r"Lingua:\s*</strong>\s*([^<]*)", page)
+    occupations = occupations.replace("\\'", "'").replace('\\"', '"').replace("\\/", "/")
     shows = []
-    for tag in re.findall(r"<a class='film-projection[^>]*>", page):
+    for tag in re.findall(r"<a class='film-projection[^>]*>", occupations):
         when = re.search(r"data-date-extended='[^']*?(\d{2})/(\d{2})/(\d{4}) ore (\d{2}):(\d{2})'", tag)
         title = re.search(r"data-title='([^']*)'", tag)
         if when and title:
@@ -174,13 +192,14 @@ def parse_t18_film(page, url):
     return shows
 
 
-def fetch_t18(host):
+def fetch_t18_films(host):
+    """Cinemino's homepage lists films without times: two requests per film."""
     base = f"https://{host}.18tickets.it"
-    page = get(base + "/")
-    shows = parse_t18_home(page)
-    if not shows:  # template without showtimes on the homepage: read each film page
-        for fid in film_ids_t18(page):
-            shows += parse_t18_film(get(f"{base}/film/{fid}"), f"{base}/film/{fid}")
+    shows = []
+    for fid in sorted(set(re.findall(r"/film/(\d+)'", get(base + "/")))):
+        url = f"{base}/film/{fid}"
+        page = get(url, pause=2)
+        shows += parse_t18_film(page, get(url + "/fetch_film_occupations", ajax=True, pause=2), url)  # no date = all dates
     return shows
 
 
@@ -211,17 +230,47 @@ def parse_cvu(page, url, today):
 def fetch_cvu(base):
     today = datetime.now(TZ).date()
     url = base + "index.php"
-    return parse_cvu(get(url), url, today) + parse_cvu(get(url + "?week=next"), url, today)
+    shows = parse_cvu(get(url), url, today)
+    try:  # next week is only presales: losing it must not hide this week
+        shows += parse_cvu(get(url + "?week=next"), url, today)
+    except OSError as e:
+        print(f"next week skipped {url}: {e!r}", file=sys.stderr)
+    return shows
 
 
-READERS = {"uci": fetch_uci, "t18": fetch_t18, "cvu": fetch_cvu}
+READERS = {"uci": fetch_uci, "t18": fetch_t18, "t18films": fetch_t18_films, "cvu": fetch_cvu}
 
 
 # --- main ---------------------------------------------------------------------
 
+def build_data(rows, failed):
+    """rows [(key, title, cinema, start, vo, url)], failed [cinema id] -> the JSON the page reads."""
+    sales, heads = {}, {}
+    for key, title, cid, *_ in rows:
+        sales.setdefault(key, set()).add(cid)
+        heads.setdefault(key, set()).add(head_key(title))
+    canon = merge_keys(sales, heads)
+    names, alt = {}, {}
+    for key, title, *_ in rows:
+        names.setdefault(canon[key], Counter())[title] += 1
+        if canon[key] != key:
+            alt.setdefault(canon[key], set()).add(key)
+    return {
+        "updated": datetime.now(TZ).isoformat(timespec="minutes"),
+        "failed": [CINEMAS[cid][0] for cid in failed],
+        "cinemas": {cid: {"name": c[0], "address": c[1]} for cid, c in CINEMAS.items() if cid not in failed},
+        "alt": {k: " ".join(sorted(v)) for k, v in alt.items()},  # merged titles stay searchable
+        "shows": [
+            {"film": display_title(names[canon[key]]), "key": canon[key], "cinema": cid,
+             "start": start.strftime("%Y-%m-%dT%H:%M"), "day": str(cinema_day(start)), "vo": vo, "url": url}
+            for key, title, cid, start, vo, url in sorted(rows, key=lambda r: (r[3], r[0]))
+        ],
+    }
+
+
 def main():
     now = datetime.now(TZ).replace(tzinfo=None, second=0, microsecond=0)
-    end = (now + timedelta(days=DAYS_AHEAD + 1)).replace(hour=0, minute=0)
+    end = (now + timedelta(days=DAYS_AHEAD + 1)).replace(hour=5, minute=0)
     seen, rows, failed = set(), [], []
     for cid, (name, _, reader, param) in CINEMAS.items():
         try:
@@ -239,28 +288,13 @@ def main():
                 seen.add((cid, key, start, vo))
                 rows.append((key, clean_title(title), cid, start, vo, url))
 
-    sales = {}
-    for key, _, cid, *_ in rows:
-        sales.setdefault(key, set()).add(cid)
-    canon = merge_keys(sales)
-    rows = [(canon[r[0]], *r[1:]) for r in rows]
-    names = {}
-    for key, title, *_ in rows:
-        names.setdefault(key, Counter())[title] += 1
-    shows = [
-        {"film": display_title(names[key]), "key": key, "cinema": cid,
-         "start": start.strftime("%Y-%m-%dT%H:%M"), "vo": vo, "url": url}
-        for key, title, cid, start, vo, url in sorted(rows, key=lambda r: (r[3], r[0]))
-    ]
-    data = {
-        "updated": datetime.now(TZ).isoformat(timespec="minutes"),
-        "failed": [CINEMAS[cid][0] for cid in failed],
-        "cinemas": {cid: {"name": c[0], "address": c[1]} for cid, c in CINEMAS.items() if cid not in failed},
-        "shows": shows,
-    }
+    if len(failed) > len(CINEMAS) / 2:  # network blip on the runner: keep the last good data online
+        print(f"{len(failed)} cinema falliti: non pubblico", file=sys.stderr)
+        return 1
+    data = build_data(rows, failed)
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"{len(shows)} spettacoli, {len(names)} film, falliti: {failed or 'nessuno'}")
+    print(f"{len(data['shows'])} spettacoli, {len(set(s['key'] for s in data['shows']))} film, falliti: {failed or 'nessuno'}")
     return 1 if failed else 0  # non-zero -> GitHub emails; the deploy still runs
 
 

@@ -19,6 +19,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # a hung site must not hold the pages concurrency group for hours
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -28,7 +29,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python test_scrape.py
-      # exits 1 when a cinema failed (GitHub emails), but still writes data.json for the others
+      # exits 1 when a cinema failed (GitHub emails), but still writes data.json for the others.
+      # data.json is gitignored, so it only exists if scrape.py wrote it: failing tests (scrape skipped)
+      # or a mass failure (scrape.py writes nothing) leave the last good deploy online.
       - run: python scrape.py
       - uses: actions/upload-pages-artifact@v4
         if: ${{ !cancelled() && hashFiles('site/data.json') != '' }}

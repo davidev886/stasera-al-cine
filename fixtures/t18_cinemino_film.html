@@ -6,13 +6,13 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="cf-2fa-verify" content="wjV6on173PxlvQr82NhJ">
 <meta content='width=device-width, initial-scale=1.0, user-scalable=1, minimum-scale=1.0, maximum-scale=2.0' name='viewport'>
-<meta content='TRAINSPOTTING (RIED.) - V. O.' property='og:title'>
-<meta content='Edimburgo. Mark Renton, ladruncolo per necessità, ha scelto un&#39;onesta e sincera tossicodipendenza. Begbie, uno psicopatico violento e alcolizzato spaventa perfino i suoi amici, ma non si sognerebbe nemmeno di toccare la droga. Spud, un disperato, ma amabile eroinomane. Sick Boy, un narciso dalle conoscenze enciclopediche su Sean Connery, in grado di tenere sotto controllo la propria dipendenza dall&#39;eroina. Poi c&#39;è Tommy che non si droga, è un maniaco delle escursioni all&#39;aria aperta e di Iggy Pop. Ai margini della storia, ci sono le ragazze del gruppo.' property='og:description'>
-<meta content='https://cdn.18tickets.net/impero/uploads/film/playbill/151997/standard_34e06e4f-c611-4077-8efd-4c50545da770.jpg' property='og:image'>
+<meta content='BALCANICA' property='og:title'>
+<meta content='Greta è una giovane dottoressa che affronta la sua prima missione umanitaria sulla rotta balcanica. L&#39;incontro con Jalil e Nazar, musicisti afghani in fuga verso l&#39;Italia, scuote profondamente le sue certezze, spingendola a un gesto estremo che potrebbe cambiare per sempre il suo destino e quello dei due musicisti.' property='og:description'>
+<meta content='https://cdn.18tickets.net/impero/uploads/film/playbill/157443/standard_819353bd-38a2-4bf2-8a11-a0063f432bb5.jpg' property='og:image'>
 
-<title>TRAINSPOTTING (RIED.) - V. O.</title>
+<title>BALCANICA</title>
 <meta name="csrf-param" content="authenticity_token" />
-<meta name="csrf-token" content="AZhdunc89od/nC+8+uoDA7QKplBiZVJEwGSWmazENyo6jcfmKssLamYGWs8hwFi5xRH/boTAxb59mEZpfeggtw==" />
+<meta name="csrf-token" content="/9s/yw3+XFC8il5jTT3QmZ2LXJS29Be94yZJcVk0Mfl9/sHkryW32HxsCFV8D0bdwzkA0hHXqBQLipKtL5TOYg==" />
 <link rel="stylesheet" media="all" href="https://cdn-assets.18tickets.net/assets/application-4ecc8bd7acb3c23b622d2894a5fdf266a4da63a58b6f3654c6e41068d8959dbc.css" />
 <link rel="stylesheet" media="screen" href="https://cdn-assets.18tickets.net/assets/themes/default-theme-96aebc3f12f8bbc6c64e9033a5d15485ebb7ee8116c96cb95471d4e493b4b445.css" />
 <link rel="stylesheet" media="screen" href="" />
@@ -153,30 +153,184 @@ Accedi
 
 <div class='main flex-grow-1'>
 <section class='container-fluid' id='section-show'>
-<input id='film-identification' type='hidden' value='trainspotting-ried-v-o-_1996'>
+<input id='film-identification' type='hidden' value='balcanica_2026-9c0c065f-29ca-4c63-a30c-30f76c96764d'>
 <div class='p-1' id='schedule-beginning'></div>
 <div class='movie row justify-content-center mt-3 d-lg-flex' id='film-row'>
-<div class='order-2 order-lg-1 col-12 col-lg-10 background-show my-3 py-2 px-0'></div>
+<div class='order-2 order-lg-1 col-12 col-lg-10 background-show my-3 py-2 px-0'><div class='d-flex justify-content-center flex-wrap col-12 mb-3'>
+<div class='col-12 col-sm-8' id='month-filters-show'>
+<div class='row justify-content-center'>
+<div class='select-month m-1 selected'>
+<i class='fas fa-calendar'></i>
+Tutti i mesi
+</div>
+<div class='select-month m-1' data-target='10'>
+<i class='fas fa-calendar'></i>
+Ottobre
+</div>
+<div class='select-month m-1' data-target='11'>
+<i class='fas fa-calendar'></i>
+Novembre
+</div>
+</div>
+<script>
+  $(document).ready(function() {
+    function initMonthsClickHandlers(context) {
+      var dateSelector, monthsSelector;
+  
+      if (context === 'index') {
+        dateSelector = "#date-baloons";
+        monthsSelector = '#month-filters';
+      } else if (context === 'show') {
+        dateSelector = "#date-baloons-show";
+        monthsSelector = '#month-filters-show';
+      }
+  
+      $(`${monthsSelector} .select-month`).on("click", function() {
+        $(".select-month").removeClass('selected');
+  
+        var date = $(`${dateSelector} .select-date.selected`).data("target");
+        var district = $(".select-district.selected").data("target");
+        var cinema = $(".select-cinema.selected").data("target");
+        var technology = $(".select-technology.selected").data("target");
+        var month = $(this).data("target");
+  
+        if (context === 'index') {
+          fetchFilms(district, date, cinema, technology, month);
+        } else if (context === 'show') {
+          fetchFilmOccupations(district, date, cinema, month);
+        }
+      });
+    }
+  
+    initMonthsClickHandlers("index");
+    initMonthsClickHandlers("show");
+  });
+</script>
+
+</div>
+</div><div class='d-flex justify-content-center flex-wrap col-12'>
+<div class='col-12 col-sm-8' id='date-baloons-show'>
+<div class='balloons-container'>
+<div class='all-dates-balloon-container'>
+<div class='m18-day-elem select-date'>
+<div class='m18-day-line-1'>+</div>
+<div class='m18-day-line-2'>Tutte</div>
+<div class='m18-day-line-3'>Le Date</div>
+</div>
+</div>
+<div class='date-balloons-container'>
+<div class='splide splide-index' id='splide-events-date'>
+<div class='splide__track'>
+<ul class='splide__list'>
+<li class='splide__slide'>
+<div class='m18-day-elem select-date selected' data-target='2026-10-31'>
+<div class='m18-day-line-1'>31</div>
+<div class='m18-day-line-2'>Ottobre</div>
+<div class='m18-day-line-3'>Sabato</div>
+</div>
+</li>
+<li class='splide__slide'>
+<div class='m18-day-elem select-date' data-target='2026-11-01'>
+<div class='m18-day-line-1'>01</div>
+<div class='m18-day-line-2'>Novembre</div>
+<div class='m18-day-line-3'>Domenica</div>
+</div>
+</li>
+<li class='splide__slide'>
+<div class='m18-day-elem select-date' data-target='2026-11-02'>
+<div class='m18-day-line-1'>02</div>
+<div class='m18-day-line-2'>Novembre</div>
+<div class='m18-day-line-3'>Lunedì</div>
+</div>
+</li>
+<li class='splide__slide'>
+<div class='m18-day-elem select-date' data-target='2026-11-03'>
+<div class='m18-day-line-1'>03</div>
+<div class='m18-day-line-2'>Novembre</div>
+<div class='m18-day-line-3'>Martedì</div>
+</div>
+</li>
+<li class='splide__slide'>
+<div class='m18-day-elem select-date' data-target='2026-11-04'>
+<div class='m18-day-line-1'>04</div>
+<div class='m18-day-line-2'>Novembre</div>
+<div class='m18-day-line-3'>Mercoledì</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<script>
+  $(document).ready(function() {
+    function initDatesClickHandlers(context) {
+      const selectors = {
+        index: {
+          day: '#date-baloons',
+          cinema: '.select-cinema',
+          district: '.select-district',
+        },
+        show: {
+          day: '#date-baloons-show',
+          cinema: '.select-cinema-show',
+          district: '.select-district-show',
+        },
+      };
+  
+      const { day, cinema, district } = selectors[context];
+  
+      document.querySelectorAll(`${day} .select-date`).forEach(function(element) {
+        element.addEventListener("click", function() {
+          const date = element.dataset.target;
+          const selectedCinema = document.querySelector(`${cinema}.selected`)?.dataset.target;
+          const selectedDistrict = document.querySelector(`${district}.selected`)?.dataset.target;
+          const technology = document.querySelector(".select-technology.selected")?.dataset.target;
+          const month = document.querySelector(".select-month.selected")?.dataset.target;
+  
+          if (context === "index") {
+            fetchFilms(selectedDistrict, date, selectedCinema, technology, month);
+          } else if (context === "show") {
+            fetchFilmOccupations(selectedDistrict, date, selectedCinema, month);
+          }
+        });
+      });
+    }
+  
+    initDatesClickHandlers("index");
+    initDatesClickHandlers("show");
+  
+    if ($("#splide-events-date").length > 0) {
+      new Splide(`#splide-events-date`, {
+        type: 'slide',
+        autoWidth: true,
+        focus: 'center',
+        start: 0,
+        pagination: false,
+        gap: '10px'
+      }).mount();
+    }
+  });
+</script>
+
+</div>
+</div></div>
 <div class='card movie__card order-1 order-lg-2 col-12 col-lg-5 background-show px-0 mr-lg-3'>
 <div class='card-body'>
 <div class='row justify-content-center'>
 <div class='col-12'>
 <h5 class='page-heading my-3'>
-TRAINSPOTTING (RIED.) - V. O.
+BALCANICA
 </h5>
 </div>
 <div class='col-7 col-lg-5 p-0'>
 <div class='movie__images'>
-<img alt='TRAINSPOTTING (RIED.) - V. O.' class='img-fluid img-thumbnail' src='https://cdn.18tickets.net/impero/uploads/film/playbill/151997/standard_34e06e4f-c611-4077-8efd-4c50545da770.jpg'>
+<img alt='BALCANICA' class='img-fluid img-thumbnail' src='https://cdn.18tickets.net/impero/uploads/film/playbill/157443/standard_819353bd-38a2-4bf2-8a11-a0063f432bb5.jpg'>
 </div>
-<a class='trailer-sample btn btn btn-md btn--warning btn-block mt-2 mb-2' href='https://www.youtube.com/watch?v=ZmCubpAEbB4'>
-<i class='fa fa-youtube mr-1'></i>
-Guarda il trailer
-</a>
 </div>
 <div class='col-6 d-none d-lg-block'>
 <p class='movie__time'>
-Durata: 93 min
+Durata: 86 min
 </p>
 <div class='movie__icons d-flex flex-wrap my-3'>
 <div class='movie__icon mr-2'>
@@ -187,31 +341,31 @@ Durata: 93 min
 <strong>
 Genere:
 </strong>
-Dramma, Crime
+Dramma
 </p>
 <p class='movie__option'>
 <strong>
 Lingua:
 </strong>
-VOS-ITA
+Italiano
 </p>
 <p class='movie__option'>
 <strong>
 Regia:
 </strong>
-Danny Boyle
+Nicola Sorcinelli
 </p>
 <p class='movie__option'>
 <strong>
 Anno:
 </strong>
-1996
+2026
 </p>
 <p class='movie__option'>
 <strong>
 Con:
 </strong>
-Ewan Mc Gregor, Ewen Bremner, Jonny Lee Miller, Kevin Mc Kidd, Robert Carlyle, Kelly Macdonald, Peter Mullan, James Cosmo, Ei...
+Matilda De Angelis, بابک کریمی, Ivar Wafaei, Giovanni Toscano
 </p>
 <div class='card-group accordion-dark' id='accordion'>
 <div class='card'>
@@ -226,7 +380,7 @@ Trama
 </div>
 <div aria-labelledby='plotHeader' class='collapse' data-parent='#accordion' id='plotPanel'>
 <div class='card-body'>
-Edimburgo. Mark Renton, ladruncolo per necessità, ha scelto un'onesta e sincera tossicodipendenza. Begbie, uno psicopatico violento e alcolizzato spaventa perfino i suoi amici, ma non si sognerebbe nemmeno di toccare la droga. Spud, un disperato, ma amabile eroinomane. Sick Boy, un narciso dalle conoscenze enciclopediche su Sean Connery, in grado di tenere sotto controllo la propria dipendenza dall'eroina. Poi c'è Tommy che non si droga, è un maniaco delle escursioni all'aria aperta e di Iggy Pop. Ai margini della storia, ci sono le ragazze del gruppo.
+Greta è una giovane dottoressa che affronta la sua prima missione umanitaria sulla rotta balcanica. L'incontro con Jalil e Nazar, musicisti afghani in fuga verso l'Italia, scuote profondamente le sue certezze, spingendola a un gesto estremo che potrebbe cambiare per sempre il suo destino e quello dei due musicisti.
 <br>
 </div>
 </div>
@@ -253,37 +407,37 @@ Info
 <div aria-labelledby='infoHeader' class='collapse' data-parent='#accordion' id='infoPanel'>
 <div class='card-body'>
 <p class='movie__time'>
-93 min
+86 min
 </p>
 <p class='movie__option'>
 <strong>
 Genere:
 </strong>
-Dramma, Crime
+Dramma
 </p>
 <p class='movie__option'>
 <strong>
 Lingua:
 </strong>
-VOS-ITA
+Italiano
 </p>
 <p class='movie__option'>
 <strong>
 Regia:
 </strong>
-Danny Boyle
+Nicola Sorcinelli
 </p>
 <p class='movie__option'>
 <strong>
 Anno:
 </strong>
-1996
+2026
 </p>
 <p class='movie__option'>
 <strong>
 Con:
 </strong>
-Ewan Mc Gregor, Ewen Bremner, Jonny Lee Miller, Kevin Mc Kidd, Robert Carlyle...
+Matilda De Angelis, بابک کریمی, Ivar Wafaei, Giovanni Toscano
 </p>
 </div>
 </div>
@@ -300,7 +454,7 @@ Trama
 </div>
 <div aria-labelledby='plotHeader' class='collapse' data-parent='#accordion' id='plotPanel'>
 <div class='card-body'>
-Edimburgo. Mark Renton, ladruncolo per necessità, ha scelto un'onesta e sincera tossicodipendenza. Begbie, uno psicopatico violento e alcolizzato spaventa perfino i suoi amici, ma non si sognerebbe nemmeno di toccare la droga. Spud, un disperato, ma amabile eroinomane. Sick Boy, un narciso dalle conoscenze enciclopediche su Sean Connery, in grado di tenere sotto controllo la propria dipendenza dall'eroina. Poi c'è Tommy che non si droga, è un maniaco delle escursioni all'aria aperta e di Iggy Pop. Ai margini della storia, ci sono le ragazze del gruppo.
+Greta è una giovane dottoressa che affronta la sua prima missione umanitaria sulla rotta balcanica. L'incontro con Jalil e Nazar, musicisti afghani in fuga verso l'Italia, scuote profondamente le sue certezze, spingendola a un gesto estremo che potrebbe cambiare per sempre il suo destino e quello dei due musicisti.
 <br>
 </div>
 </div>
@@ -310,14 +464,14 @@ Edimburgo. Mark Renton, ladruncolo per necessità, ha scelto un'onesta e sincera
 </div>
 <div class='order-3 col-12 col-lg-5 px-0'>
 <div class='card h-100 background-show'>
-<input id='film-id-show' type='hidden' value='151997'>
+<input id='film-id-show' type='hidden' value='157443'>
 <div class='card-body' id='occupations-container'>
 <div class='schedule-section-show'>
 <div class='row'>
 <div class='col-lg-12 col-sm-4'>
 <div class='time-select__place'>
 <i class='fa fa-calendar'></i>
-Lunedì 02/11/2026
+Sabato 31/10/2026
 <br>
 <a href='http://maps.google.com/?q=Via Seneca, 6, 20135, Milano, MI' rel='tooltip' target='_blank' title='Via Seneca, 6, 20135, Milano, MI'>
 <i class='fa fa-map-marker fa-lg'></i>
@@ -328,15 +482,20 @@ Il Cinemino - Milano
 </div>
 <div class='col-lg-12 col-sm-8 mb-3'>
 <ul class='d-flex flex-wrap pl-0 mb-0'>
-<a class='film-projection smooth-scroller' data-avoid-single='false' data-block-lr='0' data-booking='true' data-date-extended='Lunedì 02/11/2026 ore 21:30' data-film='f3e005fd-6954-43a5-8fa6-639534abe523' data-id='82644eb1-56f2-434b-a72f-c02f62ee15e2' data-kind='PT' data-mind-the-gap='true' data-mixed-purchase='false' data-notes='' data-sectors='' data-show-notes-on-tooltip='false' data-target='#theater-row' data-theater='5e37b897-ae51-45fb-a1ab-2cfc4f30774b' data-theater-name='Sala' data-title='TRAINSPOTTING (RIED.) - V. O.' data-tname='sala' data-tthumb='false' data-tzoom='false' data-yskey=''>
+<a class='film-projection smooth-scroller' data-avoid-single='false' data-block-lr='0' data-booking='true' data-date-extended='Sabato 31/10/2026 ore 15:00' data-film='26c9dc43-c7ea-4413-82a7-165a61d84483' data-id='05fa8ad8-b80a-468e-9c64-4945b3af480f' data-kind='PT' data-mind-the-gap='true' data-mixed-purchase='false' data-notes='ATTENZIONE: l&#39;accesso alla sala di CINEMINO è consentito esclusivamente ai soci dell&#39;Associazione Seiseneca.  Se non sei socio, fai richiesta qui almeno un giorno prima della proiezione.&lt;/br&gt;ATTENTION: access to the CINEMINO&#39;s screenings is reserved exclusively for members of the Seiseneca Association. If you are not a member, please apply here at least one day before the screening.&lt;/br&gt;&lt;/br&gt;&lt;a style=&quot;color: #ff0000;&quot; href=&quot;https://www.ilcinemino.it/tessere-2/&quot;&gt; Per tesserarsi, compilare il form qui &lt;/a&gt;' data-sectors='' data-show-notes-on-tooltip='false' data-target='#theater-row' data-theater='5e37b897-ae51-45fb-a1ab-2cfc4f30774b' data-theater-name='Sala' data-title='BALCANICA' data-tname='sala' data-tthumb='false' data-tzoom='false' data-yskey=''>
 <li class='btn btn-md btn--warning time-select__item m-1'>
 Sala
 <br>
 <i class='fas fa-ticket-alt'></i>
-21:30
+15:00
 </li>
 </a>
 </ul>
+</div>
+</div>
+<div class='row'>
+<div class='col-12'>
+<div class="alert alert-info alert4850 text-dark"><span class="icon-info"></span><strong></strong> <div>Seleziona un'altra data per vedere altri spettacoli</div> </div>
 </div>
 </div>
 
@@ -423,7 +582,7 @@ Categorie
 </div>
 <div class='container-fluid d-none p-1' id='theater-action-bar'></div>
 </section>
-<div id='film-backdrop' style='background-image: url(https://image.tmdb.org/t/p/w1280/dkfBKDUIWP1peEszdqK10MkMZCP.jpg)'></div>
+<div id='film-backdrop' style='background-image: url(https://image.tmdb.org/t/p/w1280/65SI6sY1fPolzvy1T1DbZ6RXp9D.jpg)'></div>
 <div class='modal fade' id='modal-promotion'>
 <div class='modal-dialog'>
 <div class='modal-content'>
@@ -791,7 +950,7 @@ Javascripts
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://cdn-assets.18tickets.net/assets/films-d8faaa6f44383e813cb33dad9e5deb7fa94df4a682938f8d10b03ec3a213b25c.js"></script>
 
-        <input name="recaptcha_token" type="hidden" id="recaptcha_token_717776fa1d479857e00b" data-action="r__ilcinemino_film_151997" data-auto-refresh="true" data-signup-label="Registrati"/>
+        <input name="recaptcha_token" type="hidden" id="recaptcha_token_279760a7a0d79d256ba9" data-action="r__ilcinemino_film_157443" data-auto-refresh="true" data-signup-label="Registrati"/>
         <script src="https://cdn-assets.18tickets.net/assets/captcha-refresh-a85d4b4221e437ab526d984e304250b60dc5e6a05e01e0c32308bcb2ad7b8951.js"></script>
       
 <script>

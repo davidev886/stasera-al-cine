@@ -6,7 +6,8 @@
 <title>Stasera al cine a Milano</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<!-- loaded without blocking the first paint: system fonts until it arrives -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root {
   --bg: #F4F5F7; --surface: #FFFFFF; --ink: #141821; --muted: #5B6372; --line: #DADFE6;
@@ -29,8 +30,8 @@ h1 { font-size: 24px; line-height: 1; margin: 0 0 10px; }
      color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .row { display: flex; gap: 8px; margin: 8px -16px 0; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
 .row::-webkit-scrollbar { display: none; }
-.chip { flex: none; min-height: 40px; padding: 0 14px; font: inherit; font-size: 15px; cursor: pointer;
-        color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.chip { flex: none; min-height: 44px; padding: 0 14px; font: inherit; font-size: 15px; cursor: pointer;
+        color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 22px; }
 .chip[aria-pressed="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
 .chip.partial { border-style: dashed; }
 .chip.vo[aria-pressed="true"] { color: var(--tram-ink); background: var(--tram); border-color: var(--tram); }
@@ -79,10 +80,12 @@ const norm = s => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
   .replace(/(\w)['’](\w)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim();
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeUrl = u => /^https:\/\//.test(u) ? esc(u) : "#";
+// a 00:20 show belongs to the evening before (s.day, from scrape.py) and counts as hour 24
+const hourOf = s => { const h = +s.start.slice(11, 13); return h < 5 ? h + 24 : h; };
 
-const SLOTS = [["all", "Tutto il giorno", 0, 24], ["pre", "Prima delle 18", 0, 18], ["sera", "18–21", 18, 21], ["tardi", "Dopo le 21", 21, 24]];
+const SLOTS = [["all", "Tutto il giorno", 0, 29], ["pre", "Prima delle 18", 0, 18], ["sera", "18–21", 18, 21], ["tardi", "Dopo le 21", 21, 29]];
 const state = { q: "", day: "all", dayTouched: false, slot: "all", vo: false };
-let D, days = [], partial = new Set();
+let D, days = [], partial = new Set(), missing = {};
 
 function dayLabel(k) {
   const today = new Date(), tomorrow = new Date(Date.now() + 864e5);
@@ -106,24 +109,27 @@ function renderControls() {
 
 // typing a title means "where and when, any day": unless a day was picked by hand
 const effectiveDay = () => state.q && !state.dayTouched ? "all" : state.day;
+const nowStamp = () => { const n = new Date(); return `${isoDay(n)}T${pad(n.getHours())}:${pad(n.getMinutes())}`; };
 
 function render() {
   renderControls();
-  const now = new Date(), nowS = `${isoDay(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const q = norm(state.q), day = effectiveDay();
+  const nowS = nowStamp(), q = norm(state.q), day = effectiveDay();
   const [, , from, to] = SLOTS.find(s => s[0] === state.slot);
   const films = new Map();  // key -> {film, days: Map(day -> Map(cinema -> [show]))}; shows arrive sorted
   for (const s of D.shows) {
-    const h = +s.start.slice(11, 13), d = s.start.slice(0, 10);
-    if (s.start < nowS || (day !== "all" && d !== day) || (state.vo && !s.vo) || h < from || h >= to) continue;
-    if (q && !s.key.includes(q) && !norm(s.film).includes(q)) continue;
+    const h = hourOf(s);
+    if (s.start < nowS || (day !== "all" && s.day !== day) || (state.vo && !s.vo) || h < from || h >= to) continue;
+    if (q && !`${s.key} ${D.alt[s.key] || ""} ${norm(s.film)}`.includes(q)) continue;
     const f = films.get(s.key) || films.set(s.key, { film: s.film, days: new Map() }).get(s.key);
-    const cins = f.days.get(d) || f.days.set(d, new Map()).get(d);
+    const cins = f.days.get(s.day) || f.days.set(s.day, new Map()).get(s.day);
     (cins.get(s.cinema) || cins.set(s.cinema, []).get(s.cinema)).push(s);
   }
 
-  let html = day !== "all" && partial.has(day)
-    ? `<p class="note">Per questo giorno molte sale non hanno ancora pubblicato gli orari.</p>` : "";
+  let html = "";
+  if (day !== "all" && missing[day]?.length) {
+    html = `<p class="note">${partial.has(day) ? "Per questo giorno molte sale non hanno ancora pubblicato gli orari. " : ""}` +
+      `Nessun orario (ancora) per: ${missing[day].map(c => esc(D.cinemas[c].name)).join(", ")}.</p>`;
+  }
   for (const f of films.values()) {
     html += `<article><h2 class="display">${esc(f.film)}</h2>`;
     for (const [d, cins] of f.days) {
@@ -139,8 +145,9 @@ function render() {
     }
     html += `</article>`;
   }
-  $("#list").innerHTML = html || `<div class="empty"><p>Nessuno spettacolo con questi filtri.</p>` +
+  if (!films.size) html += `<div class="empty"><p>Nessuno spettacolo con questi filtri.</p>` +
     `<button type="button" class="chip" id="reset">Mostra tutti i giorni e gli orari</button></div>`;
+  $("#list").innerHTML = html;
 }
 
 function renderStatus() {
@@ -165,23 +172,35 @@ document.addEventListener("click", e => {
 });
 $("#q").addEventListener("input", e => { state.q = e.target.value; render(); });
 
-fetch("data.json", { cache: "no-cache" }).then(r => r.json()).then(d => {
-  D = d;
-  const today = isoDay(new Date());
-  const perDay = {};
-  for (const s of D.shows) perDay[s.start.slice(0, 10)] = (perDay[s.start.slice(0, 10)] || 0) + 1;
-  days = Object.keys(perDay).filter(k => k >= today).sort();
-  // a day with far fewer shows than the busiest one is presales only: most cinemas haven't published yet.
-  // Today is never "partial": late in the evening few shows are simply left.
-  const busiest = Math.max(...Object.values(perDay));
-  partial = new Set(days.filter(k => k > today && perDay[k] < busiest * 0.4));
-  state.day = days.includes(today) ? today : "all";
-  renderStatus();
-  render();
-}).catch(() => {
-  $("#status").textContent = "Non riesco a caricare gli orari: controlla la connessione e ricarica la pagina.";
-  $("#status").classList.add("warn");
-});
+function load() {
+  return fetch("data.json", { cache: "no-cache" }).then(r => r.json()).then(d => {
+    D = d;
+    const nowS = nowStamp(), today = isoDay(new Date(Date.now() - 5 * 36e5));  // cinema day: 00:30 is still "tonight"
+    const shows = {}, cinemas = {};
+    for (const s of D.shows) {
+      shows[s.day] = (shows[s.day] || 0) + 1;
+      (cinemas[s.day] ||= new Set()).add(s.cinema);
+    }
+    days = Object.keys(shows).filter(k => k >= today).sort();
+    const active = Object.keys(D.cinemas), busiest = Math.max(...Object.values(shows));
+    // a future day is "partial" when it's mostly presales: few shows, or most cinemas not published yet.
+    // Today never is: late in the evening few shows are simply left.
+    partial = new Set(days.filter(k => k > today && (shows[k] < busiest * 0.4 || cinemas[k].size < active.length / 2)));
+    missing = Object.fromEntries(days.filter(k => k > today).map(k => [k, active.filter(c => !cinemas[k].has(c))]));
+    // default: the first day that still has a show to catch (late at night that's tomorrow)
+    const next = D.shows.find(s => s.start >= nowS);
+    if (!state.dayTouched) state.day = next ? next.day : "all";
+    renderStatus();
+    render();
+  }).catch(() => {
+    $("#status").textContent = "Non riesco a caricare gli orari: controlla la connessione e ricarica la pagina.";
+    $("#status").classList.add("warn");
+  });
+}
+load();
+// phones restore a backgrounded tab without reloading it: refresh data, "Oggi" and the staleness banner
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") load(); });
+window.addEventListener("pageshow", e => { if (e.persisted) load(); });
 </script>
 </body>
 </html>
