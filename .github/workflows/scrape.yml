@@ -25,14 +25,29 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # to see which files the push changed
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python test_scrape.py
+      # A push that leaves scrape.py alone (page, styles, workflow) only needs a redeploy: reuse the live
+      # showtimes and publish in seconds. Schedule, manual runs and scraper changes fetch them again.
+      # git diff exits 0 = scrape.py unchanged, 1 = changed, 128 = unknown base (first push): scrape.
+      - id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- scrape.py; then
+            echo "scrape=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "scrape=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.mode.outputs.scrape == 'false'
+        run: curl -fsS "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data.json" -o site/data.json || python scrape.py
       # exits 1 when a cinema failed (GitHub emails), but still writes data.json for the others.
       # data.json is gitignored, so it only exists if scrape.py wrote it: failing tests (scrape skipped)
       # or a mass failure (scrape.py writes nothing) leave the last good deploy online.
-      - run: python scrape.py
+      - if: steps.mode.outputs.scrape == 'true'
+        run: python scrape.py
       - uses: actions/upload-pages-artifact@v4
         if: ${{ !cancelled() && hashFiles('site/data.json') != '' }}
         with:
