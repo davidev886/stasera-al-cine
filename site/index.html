@@ -42,7 +42,9 @@ main { max-width: 720px; margin: 0 auto; padding: 0 16px 64px; }
 .note { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
 article { padding: 18px 0 14px; border-bottom: 1px solid var(--line); }
 h2 { margin: 0 0 6px; font-size: 30px; line-height: 1.02; overflow-wrap: anywhere; }
-h3 { margin: 12px 0 2px; font-size: 14px; font-weight: 600; color: var(--muted); }
+h3 { display: flex; align-items: center; gap: 10px; margin: 18px 0 4px; font-size: 22px; line-height: 1.1; color: var(--ink); }
+h3::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+h3 small { font: 400 13px/1 system-ui, sans-serif; color: var(--muted); }
 .cin { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
 .cin .name { flex: 1 0 100%; color: var(--ink); font-size: 15px; text-decoration: none; }
 .cin .name:hover { text-decoration: underline; }
@@ -133,7 +135,7 @@ function render() {
   for (const f of films.values()) {
     html += `<article><h2 class="display">${esc(f.film)}</h2>`;
     for (const [d, cins] of f.days) {
-      if (day === "all") html += `<h3>${dayLabel(d)}${partial.has(d) ? " (parziale)" : ""}</h3>`;
+      if (day === "all") html += `<h3 class="display">${dayLabel(d)}${partial.has(d) ? " <small>(parziale)</small>" : ""}</h3>`;
       for (const [cid, list] of cins) {
         const c = D.cinemas[cid];
         const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${c.name}, ${c.address}, Milano`);
