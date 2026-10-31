@@ -46,8 +46,12 @@ h3 { display: flex; align-items: center; gap: 10px; margin: 18px 0 4px; font-siz
 h3::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 h3 small { font: 400 13px/1 system-ui, sans-serif; color: var(--muted); }
 .cin { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 10px; }
-.cin .name { flex: 1 0 100%; color: var(--ink); font-size: 15px; text-decoration: none; }
-.cin .name:hover { text-decoration: underline; }
+.where { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+.where .name { font-size: 15px; font-weight: 600; }
+.map { display: inline-flex; align-items: center; gap: 3px; min-height: 24px; font-size: 13px; color: var(--muted);
+       text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.map:hover { color: var(--ink); text-decoration-color: currentColor; }
+.map svg { flex: none; width: 13px; height: 13px; fill: currentColor; align-self: center; }
 .t { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 50px; min-height: 34px;
      padding: 0 8px; font-size: 16px; font-variant-numeric: tabular-nums; color: var(--ink); text-decoration: none;
      background: var(--surface); border: 1px solid var(--line); border-radius: 7px; }
@@ -82,6 +86,7 @@ const norm = s => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
   .replace(/(\w)['’](\w)/g, "$1$2").replace(/[^a-z0-9]+/g, " ").trim();
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeUrl = u => /^https:\/\//.test(u) ? esc(u) : "#";
+const PIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>';
 // a 00:20 show belongs to the evening before (s.day, from scrape.py) and counts as hour 24
 const hourOf = s => { const h = +s.start.slice(11, 13); return h < 5 ? h + 24 : h; };
 
@@ -139,7 +144,9 @@ function render() {
       for (const [cid, list] of cins) {
         const c = D.cinemas[cid];
         const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${c.name}, ${c.address}, Milano`);
-        html += `<div class="cin"><a class="name" href="${maps}" target="_blank" rel="noopener">${esc(c.name)}</a>` +
+        html += `<div class="cin"><div class="where"><span class="name">${esc(c.name)}</span>` +
+          `<a class="map" href="${maps}" target="_blank" rel="noopener" aria-label="${esc(c.address)}, apri in Google Maps">` +
+          `${PIN}${esc(c.address)}</a></div>` +
           list.map(s => `<a class="t display${s.vo ? " vo" : ""}" href="${safeUrl(s.url)}" target="_blank" rel="noopener"` +
             ` aria-label="${s.start.slice(11)}${s.vo ? ", versione originale" : ""}, ${esc(c.name)}">${s.start.slice(11)}</a>`).join("") +
           `</div>`;
