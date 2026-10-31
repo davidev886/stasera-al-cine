@@ -14,7 +14,7 @@ import time
 import unicodedata
 import urllib.request
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -37,6 +37,12 @@ CINEMAS = {
     "gloria": ("Notorious Gloria", "Corso Vercelli 18", "cvu", "https://www.notoriouscinemas.it/gloria/"),
     "merlata": ("Notorious Merlata Bloom", "Via Daimler, Milano", "cvu", "https://www.notoriouscinemas.it/merlata/"),
     "sesto": ("Notorious Sesto San Giovanni", "Viale Sarca, Centro Sarca, Sesto S.G.", "cvu", "https://www.notoriouscinemas.it/sestosangiovanni/"),
+    "palestrina": ("Palestrina", "Via Palestrina 7", "palestrina", ""),
+    "beltrade": ("Beltrade", "Via Nino Oxilia 10", "beltrade", ""),
+    "plinius": ("Plinius Multisala", "Viale Abruzzi 28", "plinius", ""),
+    "cinelandia": ("Cinelandia Certosa", "Via Giovanni Gentile 3", "cinelandia", ""),
+    "ducale": ("Ducale", "Piazza Napoli 27", "cinenauta", "5065"),
+    "arcobaleno": ("Arcobaleno Film Center", "Viale Tunisia 11", "cinenauta", "5066"),
     "uci-bicocca": ("UCI Bicocca", "Viale Sarca 336", "uci", "uci-cinemas-bicocca-milano"),
     "uci-milanofiori": ("UCI Milanofiori", "Viale Milanofiori, Assago", "uci", "uci-cinemas-milanofiori-milano"),
     "uci-pioltello": ("UCI Pioltello", "Via San Francesco 33, Pioltello", "uci", "uci-cinemas-pioltello-milano"),
@@ -55,7 +61,8 @@ VO_RE = re.compile(r"\bv\.\s?o\b|\bo\.\s?v\b|\bvos\b|film in inglese|lingua orig
 NOISE_RE = re.compile(
     r"\|.*$|\[\d{4}\]|\(\s*(?:o\.\s?v\.?|v\.\s?o\.?|lingua originale)\s*\)"
     r"|(?:\s-)?\s*\bv\.\s?o\.?(?:\s?sott\.?\s?ita\.?)?(?:\s*-)?"
-    r"|(?:\s-)?\s*\bv\.\s?m\.?\s?\d{2}\b|(?:\s-)?\s*\briedizione\b|\bc\.a\.\s*$",
+    r"|(?:\s-)?\s*\bv\.\s?m\.?\s?\d{2}\b|(?:\s-)?\s*\briedizione\b|\bc\.a\.\s*$"
+    r"|^\s*(?:dolby\s+)?(?:atmos|imax|4dx|3d)\s*[-–]\s*",  # "Atmos – Clayface": the format, not the title
     re.I,
 )
 SUBTITLE_RE = re.compile(r"\s[-–]\s|:")  # "Minotaur - nel labirinto", "Avatar: fuoco e cenere"
@@ -67,8 +74,10 @@ def clean_title(raw):
 
 
 def is_vo(title, language=""):
-    """language = the cinema's language/label fields; "sottotitoli" only counts there ("Sotto le foglie")."""
-    return bool(VO_RE.search(f"{title} {language}") or re.search(r"\bsott", language, re.I))
+    """language = the cinema's language/label fields; "sottotitoli" only counts there ("Sotto le foglie").
+    "v.o. italiano" is an Italian film, not a foreign one in original language."""
+    text = re.sub(r"(?:\bv\.\s?o\.?|versione originale)\s+italian\w*", " ", f"{title} {language}", flags=re.I)
+    return bool(VO_RE.search(text) or re.search(r"\bsott", language, re.I))
 
 
 def film_key(title):
@@ -79,13 +88,14 @@ def film_key(title):
     return ALIASES.get(t, t)
 
 
-def head_key(title):
-    """Key of the title before its subtitle: "Minotaur - nel labirinto del potere" -> "minotaur"."""
-    return film_key(SUBTITLE_RE.split(clean_title(title), maxsplit=1)[0])
+def head_keys(title):
+    """Keys of the two halves of "X - Y": "Minotaur - nel labirinto del potere" -> "minotaur";
+    Palestrina puts the original title first: "La maison des femmes - La casa delle donne"."""
+    return {film_key(part) for part in SUBTITLE_RE.split(clean_title(title), maxsplit=1)}
 
 
 def merge_keys(sales, heads):
-    """sales {key: set(cinema)}, heads {key: set(head_key)} -> {key: canonical key}.
+    """sales {key: set(cinema)}, heads {key: set(head_keys)} -> {key: canonical key}.
     "minotaur nel labirinto del potere" joins "minotaur" when its title is literally "Minotaur - ..."
     and no cinema lists both: chains disagree on subtitles, one cinema showing both means two films.
     Sequels without a separator ("Scream 7") never merge.
@@ -238,7 +248,153 @@ def fetch_cvu(base):
     return shows
 
 
-READERS = {"uci": fetch_uci, "t18": fetch_t18, "t18films": fetch_t18_films, "cvu": fetch_cvu}
+def parse_cinenauta(page, local_id):
+    """cinenauta.it (Ducale, Arcobaleno): one page embeds `const DATA={...}` for both cinemas."""
+    start = page.index("const DATA=") + len("const DATA=")
+    data, _ = json.JSONDecoder().raw_decode(page, start)
+    shows = []
+    for cinema in data["cinemas"]:
+        if cinema["local_id"] != local_id:
+            continue
+        for e in cinema["events"]:
+            # Webtic titles are cut ("Ken Il Guerriero-Il Film 40° Ann"); original_title is the full one,
+            # unless it's in another language ("Ai no korîda" for "L'impero dei sensi")
+            title, orig = clean_title(e["title"]), clean_title(e.get("original_title") or "")
+            if orig and film_key(orig).split()[:1] == film_key(title).split()[:1]:
+                title = orig
+            vo = "O.V." in e["properties"] or is_vo(e["title"])
+            for day in e["days"]:
+                for p in day["performances"]:
+                    shows.append((title, datetime.fromisoformat(p["start"]), vo, e["webtic_url"]))
+    return shows
+
+
+def fetch_cinenauta(local_id):
+    return parse_cinenauta(get("https://www.cinenauta.it/"), local_id)  # robots.txt forbids /api/
+
+
+MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
+          "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+
+
+def week_start(text):
+    """'Programmazione da giovedì 29 ottobre a mercoledì 04 novembre 2026' -> date(2026, 10, 29)."""
+    m = re.search(r"da \w+ (\d{1,2}) (\w+) a \w+ \d{1,2} (\w+) (\d{4})", " ".join(text.split()))  # &nbsp;, newlines
+    d, month, end_month, y = int(m[1]), MONTHS.index(m[2].lower()) + 1, MONTHS.index(m[3].lower()) + 1, int(m[4])
+    return date(y - (month > end_month), month, d)  # "31 dicembre a 06 gennaio 2027" starts in 2026
+
+
+def parse_palestrina(page, base="https://www.progettolumiere.it/palestrina/"):
+    """One Thu-Wed week in tabs <div id="thu"> ... <div id="wed">; "VO 18:15" marks original language."""
+    first = week_start(re.sub(r"<[^>]+>", " ", page))
+    offset = {"thu": 0, "fri": 1, "sat": 2, "sun": 3, "mon": 4, "tue": 5, "wed": 6}
+    shows = []
+    tabs = re.split(r'<div id="(thu|fri|sat|sun|mon|tue|wed)">', page)
+    for tab, body in zip(tabs[1::2], tabs[2::2]):
+        day = first + timedelta(days=offset[tab])
+        for block in body.split('class="row movie-tabs"')[1:]:
+            title = re.search(r'<h3 class="no-underline">(.*?)</h3>', block, re.S)
+            link = re.search(r'href="([\w-]+\.php)"', block)
+            if not (title and link):
+                continue
+            for times in re.findall(r'class="time"[^>]*>([^<]*)<', block):
+                for vo_tag, hh, mm in re.findall(r"(VO\s*)?(\d{2})[:.](\d{2})", times):
+                    vo = bool(vo_tag) or is_vo(title.group(1))
+                    start = datetime(day.year, day.month, day.day, int(hh), int(mm))
+                    shows.append((clean_title(title.group(1)), start, vo, base + link.group(1)))
+    return shows
+
+
+def fetch_palestrina(_):
+    return parse_palestrina(get("https://www.progettolumiere.it/palestrina/home.php"))
+
+
+def parse_beltrade_list(page):
+    """bandhi.it listing: <div data-wpt-start=epoch> + title link to the film page. -> [(title, start, url)]"""
+    shows = []
+    for block in page.split('<div class="wp_theatre_event ')[1:]:
+        start = re.search(r'data-wpt-start="(\d+)"', block)
+        title = re.search(r'wp_theatre_event_title"><a href="([^"]+)">([^<]+)<', block)
+        if start and title:  # "prossimamente" entries have no time
+            when = datetime.fromtimestamp(int(start.group(1)), TZ).replace(tzinfo=None)
+            shows.append((clean_title(title.group(2)), when, title.group(1)))
+    return shows
+
+
+def beltrade_vo(film_page):
+    """V.O. is only written in the film page credits: "v.o. russo con sottotitoli in italiano"."""
+    credits = re.search(r'bah_prod_sottotitolo"[^>]*>\s*<div class="wpb_wrapper">(.*?)</div>', film_page, re.S)
+    return bool(credits) and is_vo("", html.unescape(re.sub(r"<[^>]+>", " ", credits.group(1))))
+
+
+def fetch_beltrade(_):
+    now = datetime.now(TZ).replace(tzinfo=None)
+    listing = [s for s in parse_beltrade_list(get("https://bandhi.it/bah/beltrade/"))
+               if now <= s[1] < now + timedelta(days=DAYS_AHEAD + 1)]
+    vo = {url: beltrade_vo(get(url, pause=1)) for url in sorted({s[2] for s in listing})}  # only films on in the window
+    return [(title, start, vo[url], url) for title, start, url in listing]
+
+
+def parse_plinius(page):
+    """multisalaplinius.com: per film, days labelled "Oggi", "Domani", "Lun 02/11" with time pills.
+    "Oggi" is relative to when the page was generated: the page cache stamps it as <!-- ...cached@epoch -->."""
+    cached = re.search(r"cached@(\d+)", page)
+    base = (datetime.fromtimestamp(int(cached[1]), TZ) if cached else datetime.now(TZ)).date()
+    shows = []
+    for block in page.split("film-list-title")[1:]:
+        title = re.search(r">(.*?)</h2>", block, re.S)
+        if not title:
+            continue
+        vo = is_vo(html.unescape(title[1]))
+        for label, pills in re.findall(r'showtimes-day__label[^>]*>\s*([^<]*?)\s*</div>\s*'
+                                       r'<div class="showtimes-day__pills">(.*?)</div>', block, re.S):
+            dm = re.search(r"(\d{2})/(\d{2})", label)
+            day = (date(infer_year(int(dm[2]), base), int(dm[2]), int(dm[1])) if dm
+                   else base + timedelta(days={"Oggi": 0, "Domani": 1}[label]))
+            for url, hh, mm in re.findall(r'href="([^"]+)">\s*(\d{2}):(\d{2})', pills):
+                start = datetime(day.year, day.month, day.day, int(hh), int(mm))
+                shows.append((clean_title(title[1]), start, vo, html.unescape(url)))
+    return shows
+
+
+def fetch_plinius(_):
+    return parse_plinius(get("https://multisalaplinius.com/"))
+
+
+WEEKDAYS = ["lunedi", "martedi", "mercoledi", "giovedi", "venerdi", "sabato", "domenica"]
+
+
+def day_from_name(weekday, dom, today):
+    """"SABATO 31" has no month: the date near today with that weekday and day of the month."""
+    wd = WEEKDAYS.index(film_key(weekday).split()[0])
+    return next(d for d in (today + timedelta(days=i) for i in range(-10, 25)) if d.day == dom and d.weekday() == wd)
+
+
+def parse_cinelandia(page, today, base_url=""):
+    """cinelandia.it: <h3>title</h3> then <div class="giorno">SABATO 31</div><div class="orario">15.10 – 17.40</div>."""
+    shows = []
+    for block in page.split('class="boxProg"')[1:]:
+        title = re.search(r'<a href="([^"]+)"[^>]*><h3>(.*?)</h3>', block, re.S)
+        if not title:
+            continue
+        vo = is_vo(html.unescape(title[2]))
+        for name, dom, times in re.findall(r'class="giorno">\s*([A-Za-z]+)\S*\s+(\d{1,2})\s*</div>\s*'
+                                           r'<div class="orario">([^<]*)<', block):
+            day = day_from_name(name, int(dom), today)
+            for hh, mm in re.findall(r"(\d{1,2})[.:](\d{2})", times):
+                start = datetime(day.year, day.month, day.day, int(hh), int(mm))
+                shows.append((clean_title(title[2]), start, vo, title[1]))
+    return shows
+
+
+def fetch_cinelandia(_):  # robots.txt: Crawl-delay 2
+    page = get("https://www.cinelandia.it/cinema-cinelandia-milano-certosa/", pause=2)
+    return parse_cinelandia(page, datetime.now(TZ).date())
+
+
+READERS = {"uci": fetch_uci, "t18": fetch_t18, "t18films": fetch_t18_films, "cvu": fetch_cvu,
+           "cinenauta": fetch_cinenauta, "palestrina": fetch_palestrina, "beltrade": fetch_beltrade,
+           "plinius": fetch_plinius, "cinelandia": fetch_cinelandia}
 
 
 # --- main ---------------------------------------------------------------------
@@ -248,7 +404,7 @@ def build_data(rows, failed):
     sales, heads = {}, {}
     for key, title, cid, *_ in rows:
         sales.setdefault(key, set()).add(cid)
-        heads.setdefault(key, set()).add(head_key(title))
+        heads.setdefault(key, set()).update(head_keys(title))
     canon = merge_keys(sales, heads)
     names, alt = {}, {}
     for key, title, *_ in rows:

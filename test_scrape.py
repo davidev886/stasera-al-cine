@@ -1,5 +1,6 @@
 """Parser checks against saved pages. Run: python test_scrape.py"""
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -88,6 +89,66 @@ def test_cvu():
     assert any(s[1].year == 2027 for s in dec)
 
 
+def test_cinenauta():
+    page = read("cinenauta.html")
+    ducale = scrape.parse_cinenauta(page, "5065")
+    check_basic(ducale)
+    assert len(ducale) == page.split('"local_id": "5066"')[0].count('"time":'), "a showtime was silently dropped"
+    ken = [s for s in ducale if s[0].startswith("Ken il guerriero")]
+    assert ken and all(s[0] == "Ken il guerriero - Il film" for s in ken), ken[:1]  # full title, not "...40° Ann"
+    assert any(s[2] for s in ken) and not all(s[2] for s in ken)  # an O.V. event and a dubbed one
+    assert ken[0][3].startswith("https://www.webtic.it/")
+    arco = scrape.parse_cinenauta(page, "5066")
+    sensi = [s for s in arco if "Impero" in s[0]]
+    assert sensi and sensi[0][0] == "L'Impero Dei Sensi" and sensi[0][2], sensi[:1]  # "Ai no korîda" is another language
+    assert any(s[0] == "The Lunch: A Letter to America" and s[2] for s in arco)  # V.O. only in the title
+
+
+def test_palestrina():
+    page = read("palestrina.html")
+    shows = scrape.parse_palestrina(page)
+    check_basic(shows)
+    spans = re.findall(r'class="time"[^>]*>([^<]*)<', page)
+    assert len(shows) == sum(len(re.findall(r"\d{2}[:.]\d{2}", t)) for t in spans), "a showtime was silently dropped"
+    t, _, vo, url = find(shows, "MINOTAUR", "2026-11-03T18:15")  # tab "tue" of the week from Thu 29/10
+    assert vo and url == "https://www.progettolumiere.it/palestrina/minotaur.php"
+    assert scrape.week_start("Programmazione da giovedì 31 dicembre a mercoledì 06 gennaio 2027") == date(2026, 12, 31)
+
+
+def test_beltrade():
+    page = read("beltrade.html")
+    shows = scrape.parse_beltrade_list(page)
+    assert len(shows) == page.count("data-wpt-start="), "a showtime was silently dropped"
+    t, start, url = next(s for s in shows if s[0] == "Minotaur")
+    assert start == datetime(2026, 10, 31, 13, 20) and url == "https://bandhi.it/bah/beltrade/production/minotaur/"
+    assert scrape.beltrade_vo(read("beltrade_film_vo.html"))  # "v.o. russo con sottotitoli in italiano"
+    assert not scrape.beltrade_vo(read("beltrade_film_it.html"))
+
+
+def test_plinius():
+    page = read("plinius.html")
+    shows = scrape.parse_plinius(page)
+    check_basic(shows)
+    assert len(shows) == page.count('class="showtime-pill'), "a showtime was silently dropped"
+    # "Oggi" is the day the page was generated (<!-- cached@epoch -->), not the day we read it
+    assert min(s[1] for s in shows).date() == date(2026, 10, 31)
+    assert any(s[0] == "Digger" and s[2] for s in shows) and any(s[0] == "Digger" and not s[2] for s in shows)
+    assert all("&#038;" not in s[3] for s in shows)
+
+
+def test_cinelandia():
+    page = read("cinelandia.html")
+    shows = scrape.parse_cinelandia(page, date(2026, 10, 31))
+    check_basic(shows)
+    times = re.findall(r'class="orario"[^>]*>([^<]*)<', page)
+    assert len(shows) == sum(len(re.findall(r"\d{1,2}[.:]\d{2}", t)) for t in times), "a showtime was silently dropped"
+    # a dubbed card and a "(Lingua originale) Ragione e Sentimento" card: same clean title, V.O. only on the second
+    assert {(s[0], s[2]) for s in shows if "Ragione" in s[0]} == {("Ragione e Sentimento", True), ("Ragione e Sentimento", False)}
+    assert find(shows, "FAST & FURIOUS", "2026-10-29T22:40")[3] == "https://www.cinelandia.it/fast-furious-25-anniversario/"
+    # "DOMENICA 01" seen on Saturday 31 October is 1 November
+    assert scrape.day_from_name("DOMENICA", 1, date(2026, 10, 31)) == date(2026, 11, 1)
+
+
 def test_titles():
     k = scrape.film_key
     assert k("DIO RIDE | FILM IN INGLESE") == k("Dio ride") == "dio ride"
@@ -96,12 +157,14 @@ def test_titles():
     assert k("LA CASA DELLE DONNE (LA MAISON DES FEMMES)") == k("La casa delle donne")
     assert k("JE S&Ograve; PAZZO") == k("Je so' pazzo") == "je so pazzo"
     assert k("DIGGER [2026]") == "digger"
+    assert k("Atmos – Clayface") == k("IMAX - Clayface") == "clayface"  # sound/screen format, not the title
     assert k("Avengers: Doomsday") == k("AVENGERS - DOOMSDAY")
     assert k("MAMMINA - V.M.14") == k("Mammina - v.m.18") == "mammina"
     assert k("Dracula di Bram Stoker - riedizione") == k("Dracula di Bram Stoker")
     assert k("Stray Kids World Tour RUN IT C.A.") == "stray kids world tour run it"
     assert k("L'assurda storia della Gialappa's Band") == k("L'assurda storia della gialappàs band")
     assert not scrape.is_vo("SOTTO LE FOGLIE") and scrape.is_vo("Burning", "francese sott ita")
+    assert not scrape.is_vo("", "v.o. italiano") and scrape.is_vo("", "v.o. russo")
     # Italian vs original title: grouped through the manual alias table
     scrape.ALIASES["the bride"] = "la sposa"
     assert k("The Bride!") == k("LA SPOSA")
@@ -124,10 +187,12 @@ def test_build_data():
         row("Scream 7", "uci", "2026-11-01T22:30"),  # sequel, no subtitle separator
         row("Frankenstein Junior", "mic", "2026-11-01T16:00"),
         row("Frankenstein", "uci", "2026-11-02T00:20"),  # after midnight: still Sunday night
+        row("La maison des femmes - La casa delle donne", "palestrina", "2026-11-01T15:00"),  # original first
+        row("LA CASA DELLE DONNE (LA MAISON DES FEMMES)", "arlecchino", "2026-11-01T16:00"),
     ]
     data = scrape.build_data(rows, ["colosseo"])
     keys = {s["key"] for s in data["shows"]}
-    assert keys == {"minotaur", "avatar", "avatar fuoco e cenere", "scream", "scream 7", "frankenstein", "frankenstein junior"}, keys
+    assert keys == {"minotaur", "avatar", "avatar fuoco e cenere", "scream", "scream 7", "frankenstein", "frankenstein junior", "la casa delle donne"}, keys
     assert "nel labirinto" in data["alt"]["minotaur"], "merged film must stay findable by its own title"
     late = next(s for s in data["shows"] if s["start"] == "2026-11-02T00:20")
     assert late["day"] == "2026-11-01", late
