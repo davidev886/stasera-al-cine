@@ -50,6 +50,11 @@ h3 small { font: 400 13px/1 system-ui, sans-serif; color: var(--muted); }
 .cin { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 10px; }
 .where { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
 .where .name { font-size: 15px; font-weight: 600; }
+.where .dist { font-size: 13px; font-weight: 600; color: var(--ink); }
+.search { display: flex; gap: 6px; }
+.search #q { flex: 1; min-width: 0; }
+.chip.near { display: inline-flex; align-items: center; gap: 4px; min-height: 38px; border-radius: 10px; }
+.chip.near svg { width: 13px; height: 13px; fill: currentColor; }
 .map { display: inline-flex; align-items: center; gap: 3px; min-height: 24px; font-size: 13px; color: var(--muted);
        text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .map:hover { color: var(--ink); text-decoration-color: currentColor; }
@@ -74,7 +79,10 @@ h3 small { font: 400 13px/1 system-ui, sans-serif; color: var(--muted); }
       <p id="status" aria-live="polite">Carico gli orari…</p>
     </div>
     <label class="sr" for="q">Cerca un film</label>
-    <input id="q" type="search" placeholder="Cerca un film" autocomplete="off" enterkeyhint="search">
+    <div class="search">
+      <input id="q" type="search" placeholder="Cerca un film" autocomplete="off" enterkeyhint="search">
+      <button type="button" class="chip near" id="near" aria-pressed="false"></button>
+    </div>
     <div class="row" id="days" role="group" aria-label="Giorno"></div>
     <div class="row" id="slots" role="group" aria-label="Orario e lingua"></div>
   </div>
@@ -95,7 +103,29 @@ const PIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 
 const hourOf = s => { const h = +s.start.slice(11, 13); return h < 5 ? h + 24 : h; };
 
 const SLOTS = [["all", "Tutto il giorno", 0, 29], ["pre", "Prima delle 18", 0, 18], ["sera", "18–21", 18, 21], ["tardi", "Dopo le 21", 21, 29]];
-const state = { q: "", day: "all", dayTouched: false, slot: "all", vo: false };
+const state = { q: "", day: "all", dayTouched: false, slot: "all", vo: false, near: false, locating: false, pos: null, geoMsg: "" };
+// straight-line distance in km (haversine): computed on the phone, the position never leaves it
+const km = (a, b) => {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+};
+const fmtKm = d => (d < 10 ? d.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : Math.round(d)) + " km";
+
+// GPS only on demand: the browser asks for permission the first time the button is pressed
+function locate() {
+  if (!navigator.geolocation) { state.geoMsg = "Questo browser non dà accesso alla posizione."; return render(); }
+  state.locating = true; state.geoMsg = ""; render();
+  navigator.geolocation.getCurrentPosition(p => {
+    Object.assign(state, { locating: false, near: true, pos: { lat: p.coords.latitude, lon: p.coords.longitude } });
+    render();
+  }, err => {
+    Object.assign(state, { locating: false, near: false, geoMsg: err.code === 1
+      ? "Posizione non consentita: puoi attivarla dalle impostazioni del browser per questo sito."
+      : "Non riesco a trovare la posizione: riprova tra poco." });
+    render();
+  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60e3 });
+}
 let D, days = [], partial = new Set(), missing = {};
 
 function dayLabel(k) {
@@ -116,6 +146,8 @@ function renderControls() {
     days.map(k => chip(dayLabel(k) + (partial.has(k) ? " (parziale)" : ""), day === k, `data-day="${k}"`, partial.has(k) ? "partial" : "")).join("");
   $("#slots").innerHTML = SLOTS.map(([id, label]) => chip(label, state.slot === id, `data-slot="${id}"`)).join("") +
     chip("Solo V.O.", state.vo, 'data-vo="1"', "vo");
+  $("#near").innerHTML = PIN + (state.locating ? "Cerco…" : "Vicino a me");
+  $("#near").setAttribute("aria-pressed", state.near);
 }
 
 // typing a title means "where and when, any day": unless a day was picked by hand
@@ -136,7 +168,9 @@ function render() {
     (cins.get(s.cinema) || cins.set(s.cinema, []).get(s.cinema)).push(s);
   }
 
-  let html = "";
+  const dist = {};  // cinema -> km, only with "Vicino a me" on
+  if (state.near) for (const [id, c] of Object.entries(D.cinemas)) dist[id] = c.lat == null ? Infinity : km(state.pos, c);
+  let html = state.geoMsg ? `<p class="note">${esc(state.geoMsg)}</p>` : "";
   if (day !== "all" && missing[day]?.length) {
     html = `<p class="note">${partial.has(day) ? "Per questo giorno molte sale non hanno ancora pubblicato gli orari. " : ""}` +
       `Nessun orario (ancora) per: ${missing[day].map(c => esc(D.cinemas[c].name)).join(", ")}.</p>`;
@@ -145,10 +179,12 @@ function render() {
     html += `<article><h2 class="display">${esc(f.film)}</h2>`;
     for (const [d, cins] of f.days) {
       if (day === "all") html += `<h3 class="display">${dayLabel(d)}${partial.has(d) ? " <small>(parziale)</small>" : ""}</h3>`;
-      for (const [cid, list] of cins) {
+      const order = state.near ? [...cins].sort((a, b) => dist[a[0]] - dist[b[0]]) : cins;  // nearest first
+      for (const [cid, list] of order) {
         const c = D.cinemas[cid];
         const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${c.name}, ${c.address}, Milano`);
         html += `<div class="cin"><div class="where"><span class="name">${esc(c.name)}</span>` +
+          (state.near && isFinite(dist[cid]) ? `<span class="dist">${fmtKm(dist[cid])}</span>` : "") +
           `<a class="map" href="${maps}" target="_blank" rel="noopener" aria-label="${esc(c.address)}, apri in Google Maps">` +
           `${PIN}${esc(c.address)}</a></div>` +
           list.map(s => `<a class="t display${s.vo ? " vo" : ""}" href="${safeUrl(s.url)}" target="_blank" rel="noopener"` +
@@ -180,6 +216,7 @@ document.addEventListener("click", e => {
   else if (b.dataset.day) Object.assign(state, { day: b.dataset.day, dayTouched: true });
   else if (b.dataset.slot) state.slot = b.dataset.slot;
   else if (b.dataset.vo) state.vo = !state.vo;
+  else if (b.id === "near") { if (state.near) state.near = false; else if (!state.locating) return locate(); }
   else return;
   render();
 });
@@ -205,6 +242,7 @@ function load() {
     if (!state.dayTouched) state.day = next ? next.day : "all";
     renderStatus();
     render();
+    if (state.near) locate();  // back on the tab: you may have moved
   }).catch(() => {
     $("#status").textContent = "Non riesco a caricare gli orari: controlla la connessione e ricarica la pagina.";
     $("#status").classList.add("warn");

@@ -197,6 +197,14 @@ def test_build_data():
     late = next(s for s in data["shows"] if s["start"] == "2026-11-02T00:20")
     assert late["day"] == "2026-11-01", late
     assert data["failed"] == ["Colosseo"] and "colosseo" not in data["cinemas"]
+    assert data["cinemas"]["anteo"]["lat"] == scrape.CINEMAS["anteo"][4][0]  # for "Vicino a me"
+
+
+def test_coordinates():
+    # every cinema needs a position for "Vicino a me"; a geocoding slip lands outside the Milan area
+    for cid, c in scrape.CINEMAS.items():
+        lat, lon = c[4]
+        assert 45.35 < lat < 45.62 and 9.0 < lon < 9.4, (cid, lat, lon)
 
 
 if __name__ == "__main__":

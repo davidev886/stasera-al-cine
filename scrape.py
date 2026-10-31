@@ -23,29 +23,29 @@ UA = "cinema-milano/1.0 (aggregatore personale di orari)"
 DAYS_AHEAD = 7
 OUT = Path(__file__).parent / "site" / "data.json"
 
-# id: (name, address, reader, reader parameter)
+# id: (name, address, reader, reader parameter, (lat, lon) from OpenStreetMap, for "Vicino a me")
 CINEMAS = {
-    "anteo": ("Anteo Palazzo del Cinema", "Piazza XXV Aprile 8", "t18", "anteo.spaziocinema"),
-    "citylife": ("CityLife Anteo", "Piazza Tre Torri 1", "t18", "citylife.spaziocinema"),
-    "ariosto": ("Ariosto Anteo spazioCinema", "Via Ariosto 16", "t18", "ariosto.spaziocinema"),
-    "arlecchino": ("Cineteca Arlecchino", "Via San Pietro all'Orto 9", "t18", "arlecchino.cinetecadimilano"),
-    "mic": ("Cineteca MIC", "Viale Fulvio Testi 121", "t18", "mic.cinetecadimilano"),
-    "metropolis": ("Cineteca Metropolis", "Via Oslavia 8, Paderno Dugnano", "t18", "metropolis.cinetecadimilano"),
-    "cinemino": ("Il Cinemino", "Via Seneca 6", "t18films", "ilcinemino.ilcinemino"),
-    "colosseo": ("Colosseo", "Viale Monte Nero 84", "cvu", "https://www.ilregnodelcinema.com/colosseo/"),
-    "eliseo": ("Eliseo", "Via Torino 64", "cvu", "https://www.ilregnodelcinema.com/eliseo/"),
-    "gloria": ("Notorious Gloria", "Corso Vercelli 18", "cvu", "https://www.notoriouscinemas.it/gloria/"),
-    "merlata": ("Notorious Merlata Bloom", "Via Daimler, Milano", "cvu", "https://www.notoriouscinemas.it/merlata/"),
-    "sesto": ("Notorious Sesto San Giovanni", "Viale Sarca, Centro Sarca, Sesto S.G.", "cvu", "https://www.notoriouscinemas.it/sestosangiovanni/"),
-    "palestrina": ("Palestrina", "Via Palestrina 7", "palestrina", ""),
-    "beltrade": ("Beltrade", "Via Nino Oxilia 10", "beltrade", ""),
-    "plinius": ("Plinius Multisala", "Viale Abruzzi 28", "plinius", ""),
-    "cinelandia": ("Cinelandia Certosa", "Via Giovanni Gentile 3", "cinelandia", ""),
-    "ducale": ("Ducale", "Piazza Napoli 27", "cinenauta", "5065"),
-    "arcobaleno": ("Arcobaleno Film Center", "Viale Tunisia 11", "cinenauta", "5066"),
-    "uci-bicocca": ("UCI Bicocca", "Viale Sarca 336", "uci", "uci-cinemas-bicocca-milano"),
-    "uci-milanofiori": ("UCI Milanofiori", "Viale Milanofiori, Assago", "uci", "uci-cinemas-milanofiori-milano"),
-    "uci-pioltello": ("UCI Pioltello", "Via San Francesco 33, Pioltello", "uci", "uci-cinemas-pioltello-milano"),
+    "anteo": ("Anteo Palazzo del Cinema", "Piazza XXV Aprile 8", "t18", "anteo.spaziocinema", (45.48006, 9.18779)),
+    "citylife": ("CityLife Anteo", "Piazza Tre Torri 1", "t18", "citylife.spaziocinema", (45.47831, 9.15706)),
+    "ariosto": ("Ariosto Anteo spazioCinema", "Via Ariosto 16", "t18", "ariosto.spaziocinema", (45.46915, 9.16588)),
+    "arlecchino": ("Cineteca Arlecchino", "Via San Pietro all'Orto 9", "t18", "arlecchino.cinetecadimilano", (45.46646, 9.19532)),
+    "mic": ("Cineteca MIC", "Viale Fulvio Testi 121", "t18", "mic.cinetecadimilano", (45.51338, 9.20391)),
+    "metropolis": ("Cineteca Metropolis", "Via Oslavia 8, Paderno Dugnano", "t18", "metropolis.cinetecadimilano", (45.56864, 9.15998)),
+    "cinemino": ("Il Cinemino", "Via Seneca 6", "t18films", "ilcinemino.ilcinemino", (45.45412, 9.20833)),
+    "colosseo": ("Colosseo", "Viale Monte Nero 84", "cvu", "https://www.ilregnodelcinema.com/colosseo/", (45.46171, 9.20785)),
+    "eliseo": ("Eliseo", "Via Torino 64", "cvu", "https://www.ilregnodelcinema.com/eliseo/", (45.46079, 9.18272)),
+    "gloria": ("Notorious Gloria", "Corso Vercelli 18", "cvu", "https://www.notoriouscinemas.it/gloria/", (45.46652, 9.16184)),
+    "merlata": ("Notorious Merlata Bloom", "Via Daimler, Milano", "cvu", "https://www.notoriouscinemas.it/merlata/", (45.51352, 9.09795)),
+    "sesto": ("Notorious Sesto San Giovanni", "Viale Sarca, Centro Sarca, Sesto S.G.", "cvu", "https://www.notoriouscinemas.it/sestosangiovanni/", (45.5299, 9.218)),
+    "palestrina": ("Palestrina", "Via Palestrina 7", "palestrina", "", (45.48501, 9.21389)),
+    "beltrade": ("Beltrade", "Via Nino Oxilia 10", "beltrade", "", (45.49247, 9.21489)),
+    "plinius": ("Plinius Multisala", "Viale Abruzzi 28", "plinius", "", (45.47762, 9.21737)),
+    "cinelandia": ("Cinelandia Certosa", "Via Giovanni Gentile 3", "cinelandia", "", (45.50964, 9.12815)),
+    "ducale": ("Ducale", "Piazza Napoli 27", "cinenauta", "5065", (45.45245, 9.15467)),
+    "arcobaleno": ("Arcobaleno Film Center", "Viale Tunisia 11", "cinenauta", "5066", (45.47725, 9.20531)),
+    "uci-bicocca": ("UCI Bicocca", "Viale Sarca 336", "uci", "uci-cinemas-bicocca-milano", (45.52245, 9.21967)),
+    "uci-milanofiori": ("UCI Milanofiori", "Viale Milanofiori, Assago", "uci", "uci-cinemas-milanofiori-milano", (45.40301, 9.14802)),
+    "uci-pioltello": ("UCI Pioltello", "Via San Francesco 33, Pioltello", "uci", "uci-cinemas-pioltello-milano", (45.50319, 9.32181)),
 }
 
 # Same film under different titles (Italian vs original): film_key(a) -> film_key(b).
@@ -414,7 +414,8 @@ def build_data(rows, failed):
     return {
         "updated": datetime.now(TZ).isoformat(timespec="minutes"),
         "failed": [CINEMAS[cid][0] for cid in failed],
-        "cinemas": {cid: {"name": c[0], "address": c[1]} for cid, c in CINEMAS.items() if cid not in failed},
+        "cinemas": {cid: {"name": c[0], "address": c[1], "lat": c[4][0], "lon": c[4][1]}
+                    for cid, c in CINEMAS.items() if cid not in failed},
         "alt": {k: " ".join(sorted(v)) for k, v in alt.items()},  # merged titles stay searchable
         "shows": [
             {"film": display_title(names[canon[key]]), "key": canon[key], "cinema": cid,
@@ -428,7 +429,7 @@ def main():
     now = datetime.now(TZ).replace(tzinfo=None, second=0, microsecond=0)
     end = (now + timedelta(days=DAYS_AHEAD + 1)).replace(hour=5, minute=0)
     seen, rows, failed = set(), [], []
-    for cid, (name, _, reader, param) in CINEMAS.items():
+    for cid, (name, _, reader, param, _) in CINEMAS.items():
         try:
             got = [s for s in READERS[reader](param) if now <= s[1] < end]
             if not got:
